@@ -1,0 +1,441 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Live Weather Dashboard — Glass</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'media',
+      theme: {
+        extend: {
+          fontFamily: { sans: ['Inter', 'system-ui', '-apple-system', 'Segoe UI', 'Roboto', 'sans-serif'] },
+          boxShadow: {
+            'glass': '0 20px 60px -20px rgba(0,0,0,0.4)',
+          }
+        }
+      }
+    }
+  </script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    * { -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; }
+    .scrollbar-hide::-webkit-scrollbar { display: none; }
+    .glass-anim { transition: transform 0.3s ease, background-color 0.3s ease, border-color 0.3s ease; }
+    .glass-anim:hover { transform: translateY(-2px); }
+  </style>
+</head>
+<body class="min-h-screen bg-[#f5f7fb] dark:bg-[#050810] text-gray-900 dark:text-white font-sans selection:bg-blue-500/30 selection:text-white">
+  <!-- Background -->
+  <div id="app-bg" class="fixed inset-0 -z-10">
+    <div class="absolute inset-0 bg-gradient-to-br from-[#e6f0ff] via-[#f5f7fb] to-[#eef2ff] dark:from-[#050810] dark:via-[#0a1224] dark:to-[#070b15]"></div>
+    <div id="weather-bg" class="absolute inset-0 opacity-70 transition-all duration-700 mix-blend-soft-light"></div>
+    <div class="absolute -top-40 -right-40 w-[480px] h-[480px] bg-blue-400/30 dark:bg-blue-600/20 rounded-full blur-[120px]"></div>
+    <div class="absolute -bottom-40 -left-40 w-[420px] h-[420px] bg-violet-400/20 dark:bg-indigo-600/20 rounded-full blur-[110px]"></div>
+  </div>
+
+  <!-- Loader -->
+  <div id="loader" class="fixed inset-0 z-50 grid place-items-center bg-[#050810]/40 backdrop-blur-2xl transition-opacity duration-300 hidden">
+    <div class="backdrop-blur-2xl bg-white/80 dark:bg-white/5 border border-white/30 dark:border-white/10 rounded-[28px] px-8 py-7 shadow-glass flex items-center gap-4">
+      <svg class="w-6 h-6 animate-spin" viewBox="0 0 24 24" fill="none">
+        <circle cx="12" cy="12" r="10" stroke="currentColor" stroke-opacity="0.2" stroke-width="4"/>
+        <path d="M22 12a10 10 0 0 1-10 10" stroke="currentColor" stroke-width="4" stroke-linecap="round"/>
+      </svg>
+      <div>
+        <p class="font-medium">Fetching weather</p>
+        <p class="text-xs text-gray-600 dark:text-white/60 -mt-0.5">Open-Meteo • free & fast</p>
+      </div>
+    </div>
+  </div>
+
+  <header class="max-w-[1120px] mx-auto px-4 sm:px-6 pt-6 sm:pt-10">
+    <div class="flex items-center justify-between mb-6 sm:mb-8">
+      <div class="flex items-center gap-3">
+        <div class="w-11 h-11 rounded-2xl backdrop-blur-xl bg-white/70 dark:bg-white/10 border border-black/5 dark:border-white/15 shadow-lg grid place-items-center">
+          <span class="text-[22px] leading-none">🌤️</span>
+        </div>
+        <div>
+          <h1 class="text-[22px] sm:text-2xl font-semibold tracking-tight">Weather</h1>
+          <p class="text-[11px] uppercase tracking-widest text-gray-500 dark:text-white/50 -mt-1">Live Dashboard</p>
+        </div>
+      </div>
+      <div class="text-right">
+        <p id="local-time" class="text-sm font-medium tabular-nums"></p>
+        <p class="text-[11px] text-gray-500 dark:text-white/50">Local time</p>
+      </div>
+    </div>
+
+    <!-- Search -->
+    <div class="backdrop-blur-2xl bg-white/70 dark:bg-white/[0.06] border border-black/[0.06] dark:border-white/10 rounded-[28px] p-3 sm:p-4 shadow-glass">
+      <div class="flex flex-col sm:flex-row gap-2.5">
+        <div class="relative flex-1">
+          <svg class="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400 dark:text-white/40 pointer-events-none" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-4.35-4.35m0 0A7.5 7.5 0 104.5 4.5a7.5 0 0012.15 12.15z"/>
+          </svg>
+          <input id="search-input" type="text" placeholder="Search city — try 'London' or 'Tokyo'" autocomplete="off"
+            class="w-full h-[50px] pl-11 pr-4 rounded-2xl bg-white/80 dark:bg-black/30 border border-black/5 dark:border-white/10 outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-transparent text-[15px] placeholder:text-gray-400 dark:placeholder:text-white/40 transition" />
+          <div id="suggestions" class="absolute z-30 mt-2 w-full overflow-hidden backdrop-blur-2xl bg-white/95 dark:bg-[#0b1220]/95 border border-black/5 dark:border-white/10 rounded-2xl shadow-2xl hidden"></div>
+        </div>
+        <div class="flex gap-2.5">
+          <button id="search-btn" class="h-[50px] px-5 rounded-2xl bg-gray-900 text-white dark:bg-white dark:text-black font-medium text-[14px] hover:opacity-90 active:opacity-80 transition">
+            Search
+          </button>
+          <button id="locate-btn" title="Use my location" class="h-[50px] w-[50px] grid place-items-center rounded-2xl backdrop-blur-xl bg-white/80 dark:bg-white/10 border border-black/5 dark:border-white/15 hover:bg-white dark:hover:bg-white/15 transition">
+            <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M12 21c4.5-4 7-7 7-10a7 7 0 10-14 0c0 3 2.5 6 7 10z"/>
+              <circle cx="12" cy="11" r="2.5"/>
+            </svg>
+          </button>
+        </div>
+      <div id="history" class="flex flex-wrap gap-2 mt-3"></div>
+    </div>
+  </header>
+
+  <main class="max-w-[1120px] mx-auto px-4 sm:px-6 py-6 sm:py-8">
+    <div id="error-banner" class="hidden"></div>
+
+    <div class="grid grid-cols-1 xl:grid-cols-3 gap-4 sm:gap-5">
+      <!-- Current -->
+      <div class="xl:col-span-2 relative overflow-hidden backdrop-blur-2xl bg-white/70 dark:bg-white/[0.06] border border-black/[0.06] dark:border-white/10 rounded-[32px] p-6 sm:p-8 shadow-glass glass-anim">
+        <div class="absolute -right-24 -bottom-24 w-72 h-72 bg-gradient-to-br from-blue-500/20 to-violet-500/20 rounded-full blur-3xl"></div>
+        <div class="relative z-10">
+          <div class="flex items-start justify-between gap-4">
+            <div class="min-w-0">
+              <h2 id="city-name" class="text-[28px] sm:text-[36px] font-semibold leading-tight truncate">—</h2>
+              <p id="city-details" class="text-[14px] text-gray-600 dark:text-white/60 mt-1">—</p>
+            </div>
+            <div id="weather-icon" class="text-[64px] sm:text-[80px] leading-none shrink-0 -mt-1 drop-shadow-xl">⛅</div>
+          </div>
+
+          <div class="mt-6 sm:mt-8 flex flex-wrap items-end gap-x-8 gap-y-4">
+            <div>
+              <div class="flex items-start">
+                <span id="temp" class="text-[84px] sm:text-[108px] font-[300] leading-none tracking-tighter">--</span>
+                <span class="text-2xl sm:text-3xl mt-3 ml-1.5 font-light text-gray-600 dark:text-white/70">°C</span>
+              </div>
+              <p id="feels-like" class="text-[14px] text-gray-600 dark:text-white/70 -mt-1.5 ml-1">Feels like —</p>
+            </div>
+            <div class="pb-3 sm:pb-5">
+              <p id="weather-desc" class="text-[18px] sm:text-xl font-medium">—</p>
+              <p id="temp-range" class="text-sm text-gray-600 dark:text-white/60 mt-0.5">H: — L: —</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Stats -->
+      <div class="grid grid-cols-2 gap-4">
+        <div class="backdrop-blur-2xl bg-white/70 dark:bg-white/[0.06] border border-black/[0.06] dark:border-white/10 rounded-[28px] p-5 shadow-glass glass-anim">
+          <div class="flex items-center justify-between">
+            <span class="text-[12px] uppercase tracking-wide text-gray-500 dark:text-white/55">Humidity</span>
+            <span class="text-lg">💧</span>
+          </div>
+          <p class="mt-3 text-[32px] font-medium leading-none"><span id="humidity">--</span><span class="text-[18px] ml-0.5 align-super">%</span></p>
+          <div class="mt-3 h-1.5 rounded-full bg-black/5 dark:bg-white/10 overflow-hidden">
+            <div id="humidity-bar" class="h-full w-0 bg-gradient-to-r from-sky-400 to-blue-600 rounded-full transition-all duration-700"></div>
+          </div>
+        </div>
+
+        <div class="backdrop-blur-2xl bg-white/70 dark:bg-white/[0.06] border border-black/[0.06] dark:border-white/10 rounded-[28px] p-5 shadow-glass glass-anim">
+          <div class="flex items-center justify-between">
+            <span class="text-[12px] uppercase tracking-wide text-gray-500 dark:text-white/55">Wind</span>
+            <span class="text-lg">🌬️</span>
+          </div>
+          <p class="mt-3 text-[32px] font-medium leading-none"><span id="wind">--</span></p>
+          <p class="text-xs text-gray-500 dark:text-white/55 mt-1">km/h</p>
+        </div>
+
+        <div class="backdrop-blur-2xl bg-white/70 dark:bg-white/[0.06] border border-black/[0.06] dark:border-white/10 rounded-[28px] p-5 shadow-glass glass-anim">
+          <div class="flex items-center justify-between">
+            <span class="text-[12px] uppercase tracking-wide text-gray-500 dark:text-white/55">UV Index</span>
+            <span class="text-lg">☀️</span>
+          </div>
+          <p class="mt-3 text-[32px] font-medium leading-none" id="uv-value">--</p>
+          <p id="uv-level" class="text-xs mt-1 font-medium">—</p>
+        </div>
+
+        <div class="backdrop-blur-2xl bg-white/70 dark:bg-white/[0.06] border border-black/[0.06] dark:border-white/10 rounded-[28px] p-5 shadow-glass glass-anim">
+          <div class="flex items-center justify-between">
+            <span class="text-[12px] uppercase tracking-wide text-gray-500 dark:text-white/55">Precipitation</span>
+            <span class="text-lg">🌧️</span>
+          </div>
+          <p class="mt-3 text-[32px] font-medium leading-none"><span id="precip">--</span><span class="text-[18px] ml-0.5 align-super">%</span></p>
+          <p class="text-xs text-gray-500 dark:text-white/55 mt-1">Chance today</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- Forecast -->
+    <div class="mt-9 sm:mt-12">
+      <div class="flex items-center justify-between mb-3 sm:mb-4">
+        <h3 class="text-[17px] sm:text-lg font-semibold tracking-tight">5-Day Forecast</h3>
+        <p class="text-[11px] text-gray-500 dark:text-white/50">Next 5 days • Auto timezone</p>
+      </div>
+      <div id="forecast" class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 sm:gap-4"></div>
+    </div>
+  </main>
+
+  <footer class="max-w-[1120px] mx-auto px-4 sm:px-6 pb-10">
+    <div class="text-center text-[12px] text-gray-500 dark:text-white/40">
+      Portfolio upgrade: add Node.js backend to proxy API keys for OpenWeatherMap
+    </div>
+  </footer>
+
+  <script>
+    const $ = (s) => document.querySelector(s);
+    const loader = $('#loader');
+    const searchInput = $('#search-input');
+    const searchBtn = $('#search-btn');
+    const locateBtn = $('#locate-btn');
+    const suggestionsEl = $('#suggestions');
+    const historyEl = $('#history');
+    const errorBanner = $('#error-banner');
+
+    const els = {
+      city: $('#city-name'),
+      details: $('#city-details'),
+      icon: $('#weather-icon'),
+      temp: $('#temp'),
+      feels: $('#feels-like'),
+      desc: $('#weather-desc'),
+      range: $('#temp-range'),
+      humidity: $('#humidity'),
+      humBar: $('#humidity-bar'),
+      wind: $('#wind'),
+      uv: $('#uv-value'),
+      uvLevel: $('#uv-level'),
+      precip: $('#precip'),
+      forecast: $('#forecast'),
+      time: $('#local-time'),
+      weatherBg: $('#weather-bg')
+    };
+
+    const HISTORY_KEY = 'wx-history-v1';
+    let history = JSON.parse(localStorage.getItem(HISTORY_KEY) || '[]');
+
+    function showLoader(v) { loader.classList.toggle('hidden', !v); }
+    function showError(msg) {
+      errorBanner.innerHTML = `
+        <div class="mb-6 backdrop-blur-2xl bg-red-500/10 dark:bg-red-500/15 border border-red-500/20 text-red-900 dark:text-red-100 rounded-2xl px-4 py-3 flex items-start gap-3">
+          <span class="mt-0.5">⚠️</span>
+          <div class="text-[14px] leading-snug flex-1">${msg}</div>
+          <button class="text-red-800/70 dark:text-red-200/70 hover:opacity-80" onclick="this.parentElement.parentElement.classList.add('hidden')">✕</button>
+        </div>`;
+      errorBanner.classList.remove('hidden');
+      setTimeout(() => errorBanner.classList.add('hidden'), 5000);
+    }
+
+    function saveHistory() { localStorage.setItem(HISTORY_KEY, JSON.stringify(history.slice(0,8))); }
+    function addToHistory(item) {
+      history = [item, ...history.filter(h => h.name !== item.name)].slice(0,8);
+      saveHistory(); renderHistory();
+    }
+    function renderHistory() {
+      if (!history.length) { historyEl.innerHTML = ''; return; }
+      historyEl.innerHTML = history.map(h => `
+        <button data-city="${h.name}" class="group px-3.5 py-1.5 rounded-full text-[13px] backdrop-blur-xl bg-black/5 hover:bg-black/10 dark:bg-white/10 dark:hover:bg-white/15 border border-black/5 dark:border-white/10 transition">
+          <span class="opacity-80 group-hover:opacity-100">${h.name}</span>
+        </button>`).join('');
+      historyEl.querySelectorAll('button').forEach(b => b.onclick = () => searchCity(b.dataset.city));
+    }
+
+    function weatherFromCode(code) {
+      if (code === 0) return { text:'Clear', icon:'☀️', bg:'clear' };
+      if ([1,2].includes(code)) return { text:'Partly cloudy', icon:'⛅', bg:'clouds' };
+      if (code === 3) return { text:'Overcast', icon:'☁️', bg:'clouds' };
+      if (code >=45 && code <=48) return { text:'Fog', icon:'🌫️', bg:'fog' };
+      if (code >=51 && code <=67) return { text:'Rain', icon:'🌧️', bg:'rain' };
+      if (code >=71 && code <=77) return { text:'Snow', icon:'❄️', bg:'snow' };
+      if (code >=80 && code <=82) return { text:'Showers', icon:'🌦️', bg:'rain' };
+      if (code >=85 && code <=86) return { text:'Snow showers', icon:'🌨️', bg:'snow' };
+      if (code >=95) return { text:'Thunderstorm', icon:'⛈️', bg:'storm' };
+      return { text:'—', icon:'🌡️', bg:'clouds' };
+    }
+    function uvLevel(uvi) {
+      const v = Math.round(uvi);
+      if (v <= 2) return { label:'Low', cls:'text-emerald-600 dark:text-emerald-400' };
+      if (v <= 5) return { label:'Moderate', cls:'text-yellow-600 dark:text-yellow-400' };
+      if (v <= 7) return { label:'High', cls:'text-orange-600 dark:text-orange-400' };
+      if (v <= 10) return { label:'Very High', cls:'text-red-600 dark:text-red-400' };
+      return { label:'Extreme', cls:'text-purple-600 dark:text-purple-400' };
+    }
+    function setWeatherBg(kind) {
+      const map = {
+        clear: 'bg-gradient-to-br from-sky-400/30 via-blue-500/25 to-indigo-600/25 dark:from-sky-600/20 dark:via-blue-700/15 dark:to-indigo-800/15',
+        clouds: 'bg-gradient-to-br from-slate-400/25 via-gray-500/20 to-slate-600/25 dark:from-slate-700/20 dark:via-gray-800/15 dark:to-slate-900/20',
+        rain: 'bg-gradient-to-br from-blue-600/30 via-indigo-600/25 to-slate-700/30 dark:from-blue-900/30 dark:via-indigo-900/25 dark:to-slate-900/30',
+        fog: 'bg-gradient-to-br from-zinc-400/25 via-stone-500/20 to-neutral-600/20 dark:from-zinc-700/20 dark:via-stone-800/15 dark:to-neutral-900/20',
+        snow: 'bg-gradient-to-br from-cyan-200/40 via-sky-300/30 to-blue-200/30 dark:from-cyan-900/20 dark:via-sky-900/15 dark:to-blue-900/15',
+        storm: 'bg-gradient-to-br from-violet-700/30 via-indigo-800/25 to-slate-900/40 dark:from-violet-900/30 dark:via-indigo-950/30 dark:to-black/40'
+      };
+      els.weatherBg.className = 'absolute inset-0 opacity-70 transition-all duration-700 mix-blend-soft-light ' + (map[kind] || map.clouds);
+    }
+
+    async function geocode(q) {
+      const url = `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(q)}&count=5&language=en&format=json`;
+      const r = await fetch(url); if (!r.ok) throw new Error('Geocoding failed');
+      return r.json();
+    }
+    async function reverseGeocode(lat, lon) {
+      const url = `https://geocoding-api.open-meteo.com/v1/reverse?latitude=${lat}&longitude=${lon}&language=en`;
+      const r = await fetch(url); if (!r.ok) throw new Error('Reverse failed');
+      const d = await r.json();
+      return d.results?.[0] || { name: 'Your location', country: '' };
+    }
+    async function fetchWeather(lat, lon) {
+      const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=temperature_2m,relative_humidity_2m,apparent_temperature,weather_code,wind_speed_10m,uv_index,precipitation&daily=weather_code,temperature_2m_max,temperature_2m_min,uv_index_max,precipitation_probability_max&timezone=auto&forecast_days=6`;
+      const r = await fetch(url); if (!r.ok) throw new Error('Weather failed');
+      return r.json();
+    }
+
+    function formatPlace(place, country) {
+      return country ? `${place}, ${country}` : place;
+    }
+
+    function updateUI(data, placeLabel) {
+      const cur = data.current;
+      const daily = data.daily;
+      const w = weatherFromCode(cur.weather_code);
+
+      els.city.textContent = placeLabel;
+      const tz = data.timezone || 'UTC';
+      const now = new Date();
+      els.details.textContent = `${now.toLocaleDateString(undefined, { weekday:'long', month:'short', day:'numeric' })} • ${tz}`;
+      els.icon.textContent = w.icon;
+      els.temp.textContent = Math.round(cur.temperature_2m);
+      els.feels.textContent = `Feels like ${Math.round(cur.apparent_temperature)}°`;
+      els.desc.textContent = w.text;
+      els.range.textContent = `H:${Math.round(daily.temperature_2m_max[0])}°  L:${Math.round(daily.temperature_2m_min[0])}°`;
+      els.humidity.textContent = Math.round(cur.relative_humidity_2m);
+      els.humBar.style.width = Math.min(100, Math.max(0, cur.relative_humidity_2m)) + '%';
+      els.wind.textContent = Math.round(cur.wind_speed_10m);
+      const uv = cur.uv_index ?? 0;
+      els.uv.textContent = Math.round(uv);
+      const u = uvLevel(uv);
+      els.uvLevel.textContent = u.label;
+      els.uvLevel.className = 'text-xs mt-1 font-medium ' + u.cls;
+      els.precip.textContent = Math.round(daily.precipitation_probability_max?.[0] ?? 0);
+      setWeatherBg(w.bg);
+
+      // Forecast (skip today)
+      els.forecast.innerHTML = '';
+      for (let i = 1; i <= 5; i++) {
+        const d = new Date(daily.time[i]);
+        const dayW = weatherFromCode(daily.weather_code[i]);
+        const hi = Math.round(daily.temperature_2m_max[i]);
+        const lo = Math.round(daily.temperature_2m_min[i]);
+        const pop = Math.round(daily.precipitation_probability_max[i] ?? 0);
+        const card = document.createElement('div');
+        card.className = 'backdrop-blur-2xl bg-white/70 dark:bg-white/[0.055] border border-black/[0.06] dark:border-white/10 rounded-[24px] p-4 shadow-glass glass-anim';
+        card.innerHTML = `
+          <div class="flex items-center justify-between">
+            <div>
+              <p class="text-[13px] font-medium">${d.toLocaleDateString(undefined, { weekday:'short' })}</p>
+              <p class="text-[11px] text-gray-500 dark:text-white/50 -mt-0.5">${d.toLocaleDateString(undefined, { month:'short', day:'numeric' })}</p>
+            </div>
+            <div class="text-2xl">${dayW.icon}</div>
+          </div>
+          <div class="mt-3 flex items-end justify-between">
+            <div class="text-[22px] font-medium leading-none">${hi}°<span class="text-gray-500 dark:text-white/50 text-[16px] ml-1">${lo}°</span></div>
+            <div class="text-[11px] px-2 py-1 rounded-full bg-black/5 dark:bg-white/10 text-gray-600 dark:text-white/70">💧 ${pop}%</div>
+          </div>`;
+        els.forecast.appendChild(card);
+      }
+    }
+
+    async function loadWeather(lat, lon, name, country) {
+      showLoader(true);
+      try {
+        const data = await fetchWeather(lat, lon);
+        updateUI(data, formatPlace(name, country));
+        addToHistory({ name: formatPlace(name, country), lat, lon });
+      } catch (e) {
+        showError('Could not load weather. Please try again.');
+      } finally {
+        showLoader(false);
+      }
+    }
+
+    async function searchCity(q) {
+      if (!q) return;
+      showLoader(true);
+      try {
+        const g = await geocode(q);
+        if (!g.results?.length) throw new Error('No results');
+        const place = g.results[0];
+        await loadWeather(place.latitude, place.longitude, place.name, place.country);
+        searchInput.blur();
+        suggestionsEl.classList.add('hidden');
+      } catch (e) {
+        showError('City not found. Try another name.');
+      } finally {
+        showLoader(false);
+      }
+    }
+
+    async function useMyLocation() {
+      if (!navigator.geolocation) { showError('Geolocation not supported.'); return; }
+      showLoader(true);
+      navigator.geolocation.getCurrentPosition(async (pos) => {
+        try {
+          const { latitude, longitude } = pos.coords;
+          const rev = await reverseGeocode(latitude, longitude);
+          await loadWeather(latitude, longitude, rev.name || 'Your location', rev.country || '');
+        } catch { showError('Location lookup failed.'); }
+        finally { showLoader(false); }
+      }, async () => {
+        showLoader(false);
+        showError('Location denied. Showing default city.');
+        await searchCity('Indore, India');
+      }, { enableHighAccuracy: true, timeout: 8000 });
+    }
+
+    // Suggestions
+    let suggestTimer;
+    searchInput.addEventListener('input', () => {
+      const q = searchInput.value.trim();
+      clearTimeout(suggestTimer);
+      if (q.length < 2) { suggestionsEl.classList.add('hidden'); return; }
+      suggestTimer = setTimeout(async () => {
+        try {
+          const g = await geocode(q);
+          if (!g.results?.length) { suggestionsEl.classList.add('hidden'); return; }
+          suggestionsEl.innerHTML = g.results.slice(0,5).map(r => `
+            <button class="w-full text-left px-4 py-2.5 hover:bg-black/5 dark:hover:bg-white/5 flex items-center justify-between" data-lat="${r.latitude}" data-lon="${r.longitude}" data-name="${r.name}" data-country="${r.country||''}">
+              <span class="text-[14px]">${r.name}${r.admin1 ? ', ' + r.admin1 : ''}</span>
+              <span class="text-[12px] text-gray-500 dark:text-white/50">${r.country || ''}</span>
+            </button>`).join('');
+          suggestionsEl.classList.remove('hidden');
+          suggestionsEl.querySelectorAll('button').forEach(b => b.onclick = async () => {
+            suggestionsEl.classList.add('hidden');
+            searchInput.value = b.dataset.name;
+            await loadWeather(+b.dataset.lat, +b.dataset.lon, b.dataset.name, b.dataset.country);
+          });
+        } catch {}
+      }, 250);
+    });
+    document.addEventListener('click', (e) => { if (!suggestionsEl.contains(e.target) && e.target !== searchInput) suggestionsEl.classList.add('hidden'); });
+
+    searchBtn.onclick = () => searchCity(searchInput.value.trim());
+    searchInput.onkeydown = (e) => { if (e.key === 'Enter') searchCity(searchInput.value.trim()); };
+    locateBtn.onclick = useMyLocation;
+
+    function tick() { els.time.textContent = new Date().toLocaleTimeString([], { hour:'2-digit', minute:'2-digit' }); }
+    tick(); setInterval(tick, 30000);
+
+    // Init
+    renderHistory();
+    (async () => {
+      try {
+        await useMyLocation();
+      } catch {
+        await searchCity('Indore, India');
+      }
+    })();
+  </script>
+<script>(function(){document.addEventListener("click",function(e){var a=e.target.closest("[data-product-id]");if(!a)return;e.preventDefault();var pid=a.getAttribute("data-product-id");if(pid)parent.postMessage({type:"ecto-artifact-link-click",productId:pid},"*")})})();</script>
+</body>
+</html>
